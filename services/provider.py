@@ -24,21 +24,24 @@ class ProviderService:
             available_providers = list(list_providers())
             
             if not available_providers:
-                raise Exception("No streaming providers available")
+                logger.error("No streaming providers available")
+                return  # Don't crash, just log
             
             # Use first available provider
             self.provider_name = available_providers[0]
             provider_class = get_provider(self.provider_name)
             
             if provider_class is None:
-                raise Exception(f"Could not load provider: {self.provider_name}")
+                logger.error(f"Could not load provider: {self.provider_name}")
+                return  # Don't crash, just log
             
             self.provider = provider_class()
-            logger.info(f"Initialized provider: {self.provider_name}")
+            logger.info(f"✅ Successfully initialized provider: {self.provider_name}")
             
         except Exception as e:
             logger.error(f"Failed to initialize provider: {e}")
-            raise
+            # Don't raise - let the app start even if provider fails
+            logger.warning("App will start but streaming features will be unavailable")
     
     def search_anime(self, query: str, language: str = "sub") -> List[Dict]:
         """
@@ -51,6 +54,9 @@ class ProviderService:
         Returns:
             List of found anime with id and name
         """
+        if not self.provider:
+            raise Exception("Provider not initialized - streaming service unavailable")
+        
         try:
             lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
             results = self.provider.get_search(query, lang_enum)
@@ -78,6 +84,9 @@ class ProviderService:
         Returns:
             List of episodes with number and id
         """
+        if not self.provider:
+            raise Exception("Provider not initialized - streaming service unavailable")
+        
         try:
             lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
             episodes = self.provider.get_episodes(anime_id, lang_enum)
@@ -105,6 +114,9 @@ class ProviderService:
         Returns:
             Stream URL string
         """
+        if not self.provider:
+            raise Exception("Provider not initialized - streaming service unavailable")
+        
         try:
             # Get episodes list first
             episodes = self.get_episodes(anime_id, language)

@@ -41,11 +41,13 @@ anilist = AniListService()
 @app.get("/")
 async def root():
     """Health check endpoint"""
+    provider_status = "ready" if provider_service.provider else "unavailable"
     return {
         "status": "online",
         "name": "Anime Stream API",
         "version": "1.0.0",
-        "provider": provider_service.provider_name
+        "provider": provider_service.provider_name or "not initialized",
+        "provider_status": provider_status
     }
 
 
