@@ -3,8 +3,9 @@ Anime Provider Service using anipy-api
 Handles streaming provider integration
 """
 from typing import List, Dict, Optional
-from anipy_api.provider import list_providers, get_provider, LanguageTypeEnum
-from anipy_api.anime import Anime
+from anipy_api.provider import Filters, LanguageTypeEnum
+# Direct imports - get_provider() is broken in anipy-api 3.8.4
+from anipy_api.provider.providers.allanime_provider import AllAnimeProvider
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,28 +20,14 @@ class ProviderService:
         self._initialize_provider()
     
     def _initialize_provider(self):
-        """Initialize the streaming provider"""
+        """Initialize the streaming provider using direct imports"""
         try:
-            available_providers = list(list_providers())
-            
-            if not available_providers:
-                logger.error("No streaming providers available")
-                return  # Don't crash, just log
-            
-            # Use first available provider
-            self.provider_name = available_providers[0]
-            provider_class = get_provider(self.provider_name)
-            
-            if provider_class is None:
-                logger.error(f"Could not load provider: {self.provider_name}")
-                return  # Don't crash, just log
-            
-            self.provider = provider_class()
-            logger.info(f"✅ Successfully initialized provider: {self.provider_name}")
-            
+            logger.info("Initializing AllAnime provider...")
+            self.provider = AllAnimeProvider()
+            self.provider_name = "allanime"
+            logger.info(f"✅ Successfully initialized provider: allanime")
         except Exception as e:
-            logger.error(f"Failed to initialize provider: {e}")
-            # Don't raise - let the app start even if provider fails
+            logger.error(f"❌ Failed to initialize provider: {e}")
             logger.warning("App will start but streaming features will be unavailable")
     
     def search_anime(self, query: str, language: str = "sub") -> List[Dict]:
@@ -49,7 +36,7 @@ class ProviderService:
         
         Args:
             query: Anime name to search
-            language: 'sub' or 'dub'
+            language: 'sub' or 'dub' (not used in new API but kept for compatibility)
             
         Returns:
             List of found anime with id and name
@@ -58,14 +45,14 @@ class ProviderService:
             raise Exception("Provider not initialized - streaming service unavailable")
         
         try:
-            lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
-            results = self.provider.get_search(query, lang_enum)
+            # New API uses Filters() instead of LanguageTypeEnum
+            results = list(self.provider.get_search(query, Filters()))
             
             return [
                 {
                     "id": anime.identifier,
                     "name": anime.name,
-                    "languages": [str(lang) for lang in anime.languages]
+                    "languages": [str(lang) for lang in anime.languages] if hasattr(anime, 'languages') else ["sub"]
                 }
                 for anime in results[:10]
             ]
@@ -82,21 +69,22 @@ class ProviderService:
             language: 'sub' or 'dub'
             
         Returns:
-            List of episodes with number and id
+            List of episodes with number
         """
         if not self.provider:
             raise Exception("Provider not initialized - streaming service unavailable")
         
         try:
             lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
-            episodes = self.provider.get_episodes(anime_id, lang_enum)
+            episodes = list(self.provider.get_episodes(anime_id, lang_enum))
             
+            # Episodes are just integers (episode numbers) in new API
             return [
                 {
-                    "number": idx + 1,
-                    "id": ep.identifier
+                    "number": ep,
+                    "id": str(ep)
                 }
-                for idx, ep in enumerate(episodes)
+                for ep in episodes
             ]
         except Exception as e:
             logger.error(f"Failed to get episodes: {e}")
@@ -118,27 +106,17 @@ class ProviderService:
             raise Exception("Provider not initialized - streaming service unavailable")
         
         try:
-            # Get episodes list first
-            episodes = self.get_episodes(anime_id, language)
-            
-            if episode_number < 1 or episode_number > len(episodes):
-                raise ValueError(f"Invalid episode number: {episode_number}")
-            
-            # Get the specific episode
             lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
-            episodes_list = self.provider.get_episodes(anime_id, lang_enum)
-            episode = episodes_list[episode_number - 1]
             
-            # Get stream
-            stream = self.provider.get_video(episode)
+            # New API: get_video(anime_id, episode_number, language) returns list of ProviderStream
+            streams = self.provider.get_video(anime_id, episode_number, lang_enum)
             
-            # Extract URL (anipy-api returns different objects depending on provider)
-            if hasattr(stream, 'url'):
-                return stream.url
-            elif hasattr(stream, 'stream_url'):
-                return stream.stream_url
-            else:
-                return str(stream)
+            if not streams:
+                raise ValueError(f"No streams found for episode {episode_number}")
+            
+            # Get best quality stream (first one is usually best)
+            stream = streams[0]
+            return stream.url
                 
         except Exception as e:
             logger.error(f"Failed to get stream URL: {e}")

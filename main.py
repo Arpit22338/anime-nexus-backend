@@ -200,19 +200,14 @@ async def get_stream(
 
 
 @app.get("/providers")
-async def list_providers():
+async def list_available_providers():
     """List available streaming providers"""
-    from anipy_api.provider import list_providers
-    
-    try:
-        providers = list(list_providers())
-        return {
-            "success": True,
-            "providers": providers,
-            "current": provider_service.provider_name
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "success": True,
+        "providers": ["allanime"],
+        "current": provider_service.provider_name,
+        "status": "ready" if provider_service.provider else "unavailable"
+    }
 
 
 if __name__ == "__main__":
