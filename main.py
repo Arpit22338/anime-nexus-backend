@@ -4,9 +4,10 @@ FastAPI backend for personal anime streaming application
 """
 from fastapi import FastAPI, HTTPException, Query, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Optional
 import logging
+import httpx
 
 from services.anilist import AniListService
 from services.provider import provider_service
@@ -172,14 +173,14 @@ async def get_stream(
         # Use first result
         anime = search_results[0]
         
-        # Get stream URL
-        stream_url = provider_service.get_stream_url(
+        # Get stream data (now returns dict with url, referrer, resolution)
+        stream_data = provider_service.get_stream_url(
             anime["id"],
             episode_number,
             language
         )
         
-        if not stream_url:
+        if not stream_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"Stream not found for episode {episode_number}"
@@ -190,7 +191,9 @@ async def get_stream(
             "anime": anime,
             "episode": episode_number,
             "language": language,
-            "stream_url": stream_url
+            "stream_url": stream_data["url"],
+            "referrer": stream_data["referrer"],
+            "resolution": stream_data["resolution"]
         }
         
     except HTTPException:
@@ -199,6 +202,39 @@ async def get_stream(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to get stream: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/proxy")
+async def proxy_stream(
+    url: str = Query(..., description="Video URL to proxy"),
+    referer: str = Query("https://allanime.day", description="Referrer header")
+):
+    """
+    Proxy video stream to bypass referrer restrictions
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                headers={
+                    "Referer": referer,
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                },
+                follow_redirects=True,
+                timeout=30.0
+            )
+            
+            return StreamingResponse(
+                iter([response.content]),
+                media_type=response.headers.get("content-type", "video/mp4"),
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": response.headers.get("content-length", "0")
+                }
+            )
+    except Exception as e:
+        logger.error(f"Proxy failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

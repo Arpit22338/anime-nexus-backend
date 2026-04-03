@@ -90,7 +90,7 @@ class ProviderService:
             logger.error(f"Failed to get episodes: {e}")
             raise
     
-    def get_stream_url(self, anime_id: str, episode_number: int, language: str = "sub") -> Optional[str]:
+    def get_stream_url(self, anime_id: str, episode_number: int, language: str = "sub") -> dict:
         """
         Get stream URL for a specific episode
         
@@ -100,7 +100,7 @@ class ProviderService:
             language: 'sub' or 'dub'
             
         Returns:
-            Stream URL string
+            Dict with url, referrer, and resolution
         """
         if not self.provider:
             raise Exception("Provider not initialized - streaming service unavailable")
@@ -116,7 +116,11 @@ class ProviderService:
             
             # Get best quality stream (first one is usually best)
             stream = streams[0]
-            return stream.url
+            return {
+                "url": stream.url,
+                "referrer": stream.referrer,
+                "resolution": stream.resolution
+            }
                 
         except Exception as e:
             logger.error(f"Failed to get stream URL: {e}")
