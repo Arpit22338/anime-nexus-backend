@@ -205,6 +205,53 @@ async def get_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api.get("/stream-by-id/{anime_id}/{episode_number}")
+async def get_stream_by_id(
+    anime_id: str,
+    episode_number: int,
+    language: str = Query("sub", regex="^(sub|dub)$")
+):
+    """
+    Get stream URL using anime ID directly (no search needed)
+    
+    Args:
+        anime_id: Provider anime ID
+        episode_number: Episode number (1-indexed)
+        language: 'sub' or 'dub'
+    """
+    try:
+        # Get stream data directly using ID
+        stream_data = provider_service.get_stream_url(
+            anime_id,
+            episode_number,
+            language
+        )
+        
+        if not stream_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Stream not found for episode {episode_number}"
+            )
+        
+        return {
+            "success": True,
+            "anime_id": anime_id,
+            "episode": episode_number,
+            "language": language,
+            "stream_url": stream_data["url"],
+            "referrer": stream_data["referrer"],
+            "resolution": stream_data["resolution"]
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get stream by ID: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api.get("/proxy")
 async def proxy_stream(
     url: str = Query(..., description="Video URL to proxy"),
