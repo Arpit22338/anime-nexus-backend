@@ -14,10 +14,28 @@ def test():
     try:
         from anipy_api.provider import list_providers, get_provider, LanguageTypeEnum
         providers = list(list_providers())
+        
+        # Test each provider
+        provider_tests = []
+        for pname in providers:
+            try:
+                pclass = get_provider(pname)
+                provider_tests.append({
+                    'name': pname,
+                    'class_exists': pclass is not None,
+                    'class_type': str(type(pclass))
+                })
+            except Exception as e:
+                provider_tests.append({
+                    'name': pname,
+                    'error': str(e)
+                })
+        
         return jsonify({
             'success': True,
             'providers': providers,
-            'provider_count': len(providers)
+            'provider_count': len(providers),
+            'provider_tests': provider_tests
         })
     except Exception as e:
         import traceback
