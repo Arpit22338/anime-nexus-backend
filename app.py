@@ -12,7 +12,10 @@ def get_default_provider():
     global DEFAULT_PROVIDER
     if not DEFAULT_PROVIDER:
         providers = list(list_providers())
-        DEFAULT_PROVIDER = get_provider(providers[0])()
+        if not providers:
+            raise Exception("No providers available")
+        provider_name = providers[0]
+        DEFAULT_PROVIDER = get_provider(provider_name)
     return DEFAULT_PROVIDER
 
 @app.route('/')
@@ -27,10 +30,10 @@ def search():
     
     try:
         provider = get_default_provider()
-        results = provider.get_search(q)
+        results = provider.get_search(q, LanguageTypeEnum.SUB)
         return jsonify({
             'success': True,
-            'results': [{'id': r.identifier, 'name': r.name, 'languages': r.languages} for r in results[:15]]
+            'results': [{'id': r.identifier, 'name': r.name, 'languages': [str(lang) for lang in r.languages]} for r in results[:15]]
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -39,15 +42,20 @@ def search():
 def get_anime(anime_id):
     try:
         provider = get_default_provider()
-        anime = provider.get_anime(anime_id)
-        return jsonify({
-            'success': True,
-            'anime': {
-                'id': anime.identifier,
-                'name': anime.name,
-                'languages': anime.languages
-            }
-        })
+        # Note: anipy-api doesn't have a direct get_anime method
+        # We'll search for it instead
+        results = provider.get_search(anime_id, LanguageTypeEnum.SUB)
+        if results:
+            anime = results[0]
+            return jsonify({
+                'success': True,
+                'anime': {
+                    'id': anime.identifier,
+                    'name': anime.name,
+                    'languages': [str(lang) for lang in anime.languages]
+                }
+            })
+        return jsonify({'error': 'Anime not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -56,9 +64,6 @@ def get_episodes(anime_id):
     lang = request.args.get('lang', 'sub')
     try:
         provider = get_default_provider()
-        
-        # Get anime info first
-        anime = provider.get_anime(anime_id)
         
         # Get episodes for the specified language
         lang_enum = LanguageTypeEnum.SUB if lang == 'sub' else LanguageTypeEnum.DUB
@@ -69,7 +74,7 @@ def get_episodes(anime_id):
             'episodes': [{'number': i+1, 'id': ep.identifier} for i, ep in enumerate(episodes)]
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'anime_id': anime_id}), 500
 
 @app.route('/api/stream/<anime_id>/<int:episode>')
 def get_stream(anime_id, episode):
