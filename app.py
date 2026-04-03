@@ -30,18 +30,29 @@ def debug():
         provider_info = []
         for p in providers:
             provider_class = get_provider(p)
-            provider_info.append({
-                'name': p,
-                'class': str(provider_class),
-                'is_none': provider_class is None
-            })
+            try:
+                instance = provider_class()
+                provider_info.append({
+                    'name': p,
+                    'class_name': provider_class.__name__ if hasattr(provider_class, '__name__') else str(provider_class),
+                    'instance_created': True,
+                    'instance_type': str(type(instance))
+                })
+            except Exception as e:
+                provider_info.append({
+                    'name': p,
+                    'class_name': str(provider_class),
+                    'instance_created': False,
+                    'error': str(e)
+                })
         return jsonify({
-            'providers': providers,
+            'providers_found': providers,
             'provider_details': provider_info,
             'count': len(providers)
         })
     except Exception as e:
-        return jsonify({'error': str(e), 'type': str(type(e))}), 500
+        import traceback
+        return jsonify({'error': str(e), 'type': str(type(e)), 'traceback': traceback.format_exc()}), 500
 
 @app.route('/api/search')
 def search():
