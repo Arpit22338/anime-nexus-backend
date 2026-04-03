@@ -23,6 +23,26 @@ def get_default_provider():
 def home():
     return jsonify({'status': 'online', 'name': 'ANIME//NEXUS API'})
 
+@app.route('/api/debug')
+def debug():
+    try:
+        providers = list(list_providers())
+        provider_info = []
+        for p in providers:
+            provider_class = get_provider(p)
+            provider_info.append({
+                'name': p,
+                'class': str(provider_class),
+                'is_none': provider_class is None
+            })
+        return jsonify({
+            'providers': providers,
+            'provider_details': provider_info,
+            'count': len(providers)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'type': str(type(e))}), 500
+
 @app.route('/api/search')
 def search():
     q = request.args.get('q', '')
