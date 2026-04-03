@@ -15,7 +15,8 @@ def get_default_provider():
         if not providers:
             raise Exception("No providers available")
         provider_name = providers[0]
-        DEFAULT_PROVIDER = get_provider(provider_name)
+        provider_class = get_provider(provider_name)
+        DEFAULT_PROVIDER = provider_class()  # Instantiate the class
     return DEFAULT_PROVIDER
 
 @app.route('/')
