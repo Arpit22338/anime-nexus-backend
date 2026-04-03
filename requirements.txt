@@ -1,0 +1,4 @@
+flask
+flask-cors
+anipy-api
+gunicorn
