@@ -32,30 +32,84 @@ class ProviderService:
     
     def search_anime(self, query: str, language: str = "sub") -> List[Dict]:
         """
-        Search for anime in the provider
+        Search for anime in the provider with smart matching
         
         Args:
             query: Anime name to search
             language: 'sub' or 'dub' (not used in new API but kept for compatibility)
             
         Returns:
-            List of found anime with id and name
+            List of found anime with id and name, sorted by episode count (main series first)
         """
         if not self.provider:
             raise Exception("Provider not initialized - streaming service unavailable")
         
         try:
-            # New API uses Filters() instead of LanguageTypeEnum
-            results = list(self.provider.get_search(query, Filters()))
+            lang_enum = LanguageTypeEnum.SUB if language == "sub" else LanguageTypeEnum.DUB
+            all_results = []
             
-            return [
-                {
-                    "id": anime.identifier,
-                    "name": anime.name,
-                    "languages": [str(lang) for lang in anime.languages] if hasattr(anime, 'languages') else ["sub"]
-                }
-                for anime in results[:10]
-            ]
+            # Try multiple search variations
+            search_terms = [query]
+            
+            # Add Japanese title variations for common anime
+            title_map = {
+                "one piece": ["ワンピース", "1P"],
+                "naruto": ["ナルト", "NARUTO"],
+                "naruto shippuden": ["ナルト 疾風伝", "Naruto Shippuuden"],
+                "dragon ball": ["ドラゴンボール"],
+                "dragon ball z": ["ドラゴンボールZ", "DBZ"],
+                "attack on titan": ["進撃の巨人", "Shingeki no Kyojin"],
+                "demon slayer": ["鬼滅の刃", "Kimetsu no Yaiba"],
+                "my hero academia": ["僕のヒーローアカデミア", "Boku no Hero Academia"],
+                "jujutsu kaisen": ["呪術廻戦"],
+                "bleach": ["ブリーチ", "BLEACH"],
+                "hunter x hunter": ["ハンター×ハンター", "HxH"],
+                "fullmetal alchemist": ["鋼の錬金術師"],
+                "death note": ["デスノート"],
+                "one punch man": ["ワンパンマン"],
+                "spy x family": ["スパイファミリー", "SPY×FAMILY"],
+            }
+            
+            # Check if query matches any known titles
+            query_lower = query.lower().strip()
+            for eng_title, variations in title_map.items():
+                if eng_title in query_lower or query_lower in eng_title:
+                    search_terms.extend(variations)
+                    break
+            
+            # Search all terms and collect results
+            seen_ids = set()
+            for term in search_terms:
+                try:
+                    results = list(self.provider.get_search(term, Filters()))
+                    for anime in results:
+                        if anime.identifier not in seen_ids:
+                            seen_ids.add(anime.identifier)
+                            # Get episode count to help sort
+                            try:
+                                eps = list(self.provider.get_episodes(anime.identifier, lang_enum))
+                                ep_count = len(eps)
+                            except:
+                                ep_count = 0
+                            all_results.append({
+                                "id": anime.identifier,
+                                "name": anime.name,
+                                "languages": [str(lang) for lang in anime.languages] if hasattr(anime, 'languages') else ["sub"],
+                                "episode_count": ep_count
+                            })
+                except Exception as e:
+                    logger.warning(f"Search term '{term}' failed: {e}")
+                    continue
+            
+            # Sort by episode count (main series usually has most episodes)
+            all_results.sort(key=lambda x: x.get("episode_count", 0), reverse=True)
+            
+            # Remove episode_count from final output (internal use only)
+            for r in all_results:
+                r.pop("episode_count", None)
+            
+            return all_results[:15]
+            
         except Exception as e:
             logger.error(f"Provider search failed: {e}")
             return []
