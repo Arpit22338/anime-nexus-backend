@@ -2,7 +2,7 @@
 Anime Streaming Backend API
 FastAPI backend for personal anime streaming application
 """
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Optional
@@ -37,6 +37,9 @@ app.add_middleware(
 # Initialize services
 anilist = AniListService()
 
+# Create API router with /api prefix
+api = APIRouter(prefix="/api")
+
 
 @app.get("/")
 async def root():
@@ -51,7 +54,7 @@ async def root():
     }
 
 
-@app.get("/search")
+@api.get("/search")
 async def search_anime(
     q: str = Query(..., description="Anime name to search"),
     limit: int = Query(15, ge=1, le=50, description="Max results")
@@ -74,7 +77,7 @@ async def search_anime(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/anime/{anime_id}")
+@api.get("/anime/{anime_id}")
 async def get_anime_details(anime_id: int):
     """
     Get detailed information about a specific anime from AniList
@@ -99,7 +102,7 @@ async def get_anime_details(anime_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/episodes/{anime_name}")
+@api.get("/episodes/{anime_name}")
 async def get_episodes(
     anime_name: str,
     language: str = Query("sub", regex="^(sub|dub)$")
@@ -142,7 +145,7 @@ async def get_episodes(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stream/{anime_name}/{episode_number}")
+@api.get("/stream/{anime_name}/{episode_number}")
 async def get_stream(
     anime_name: str,
     episode_number: int,
@@ -199,7 +202,7 @@ async def get_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/providers")
+@api.get("/providers")
 async def list_available_providers():
     """List available streaming providers"""
     return {
@@ -208,6 +211,10 @@ async def list_available_providers():
         "current": provider_service.provider_name,
         "status": "ready" if provider_service.provider else "unavailable"
     }
+
+
+# Include the API router
+app.include_router(api)
 
 
 if __name__ == "__main__":
