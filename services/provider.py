@@ -39,7 +39,7 @@ class ProviderService:
             language: 'sub' or 'dub' (not used in new API but kept for compatibility)
             
         Returns:
-            List of found anime with id and name, sorted by episode count (main series first)
+            List of found anime with id and name, sorted by title similarity then episode count
         """
         if not self.provider:
             raise Exception("Provider not initialized - streaming service unavailable")
@@ -91,28 +91,62 @@ class ProviderService:
                                 ep_count = len(eps)
                             except:
                                 ep_count = 0
+                            
+                            # Calculate title similarity score
+                            name_lower = anime.name.lower()
+                            similarity = self._calculate_similarity(query_lower, name_lower)
+                            
                             all_results.append({
                                 "id": anime.identifier,
                                 "name": anime.name,
                                 "languages": [str(lang) for lang in anime.languages] if hasattr(anime, 'languages') else ["sub"],
-                                "episode_count": ep_count
+                                "episode_count": ep_count,
+                                "similarity": similarity
                             })
                 except Exception as e:
                     logger.warning(f"Search term '{term}' failed: {e}")
                     continue
             
-            # Sort by episode count (main series usually has most episodes)
-            all_results.sort(key=lambda x: x.get("episode_count", 0), reverse=True)
+            # Sort by similarity first, then episode count as tiebreaker
+            all_results.sort(key=lambda x: (-x.get("similarity", 0), -x.get("episode_count", 0)))
             
-            # Remove episode_count from final output (internal use only)
+            # Remove internal fields from final output
             for r in all_results:
                 r.pop("episode_count", None)
+                r.pop("similarity", None)
             
             return all_results[:15]
             
         except Exception as e:
             logger.error(f"Provider search failed: {e}")
             return []
+    
+    def _calculate_similarity(self, query: str, name: str) -> float:
+        """Calculate similarity score between query and anime name"""
+        query = query.lower().strip()
+        name = name.lower().strip()
+        
+        # Exact match gets highest score
+        if query == name:
+            return 100
+        
+        # Check if query is contained in name or vice versa
+        if query in name:
+            # Prefer shorter names (more specific matches)
+            return 80 + (len(query) / len(name)) * 10
+        if name in query:
+            return 70 + (len(name) / len(query)) * 10
+        
+        # Check word overlap
+        query_words = set(query.split())
+        name_words = set(name.split())
+        common_words = query_words & name_words
+        
+        if common_words:
+            # Score based on how many words match
+            return 50 + (len(common_words) / max(len(query_words), len(name_words))) * 30
+        
+        return 0
     
     def get_episodes(self, anime_id: str, language: str = "sub") -> List[Dict]:
         """
@@ -165,15 +199,20 @@ class ProviderService:
             # New API: get_video(anime_id, episode_number, language) returns list of ProviderStream
             streams = self.provider.get_video(anime_id, episode_number, lang_enum)
             
-            if not streams:
+            if not streams or len(streams) == 0:
                 raise ValueError(f"No streams found for episode {episode_number}")
             
             # Get best quality stream (first one is usually best)
             stream = streams[0]
+            
+            # Check if stream object has required attributes
+            if not hasattr(stream, 'url') or not stream.url:
+                raise ValueError(f"Stream URL not available for episode {episode_number}")
+                
             return {
                 "url": stream.url,
-                "referrer": stream.referrer,
-                "resolution": stream.resolution
+                "referrer": getattr(stream, 'referrer', 'https://allanime.day'),
+                "resolution": getattr(stream, 'resolution', 1080)
             }
                 
         except Exception as e:
