@@ -296,6 +296,72 @@ async def list_available_providers():
     }
 
 
+@api.get("/episodes-by-id/{anime_id}")
+async def get_episodes_by_id(
+    anime_id: str,
+    language: str = Query("sub", regex="^(sub|dub)$")
+):
+    """
+    Get episodes using provider ID directly (faster, no search)
+    
+    Args:
+        anime_id: Provider's anime identifier
+        language: 'sub' or 'dub'
+    """
+    try:
+        episodes = provider_service.get_episodes(anime_id, language)
+        return {
+            "success": True,
+            "anime_id": anime_id,
+            "language": language,
+            "episodes": episodes,
+            "episode_count": len(episodes)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get episodes by ID: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api.get("/lookup/{anilist_id}")
+async def lookup_provider_id(anilist_id: int):
+    """
+    Get provider ID from AniList ID (instant lookup from mapping)
+    
+    Args:
+        anilist_id: AniList anime ID
+    """
+    provider_id = provider_service.get_provider_id_by_anilist(anilist_id)
+    
+    if provider_id:
+        return {
+            "success": True,
+            "anilist_id": anilist_id,
+            "provider_id": provider_id,
+            "mapped": True
+        }
+    else:
+        return {
+            "success": True,
+            "anilist_id": anilist_id,
+            "provider_id": None,
+            "mapped": False
+        }
+
+
+@api.get("/trending")
+async def get_trending():
+    """Get trending anime from AniList"""
+    try:
+        trending = await anilist.get_trending()
+        return {
+            "success": True,
+            "trending": trending
+        }
+    except Exception as e:
+        logger.error(f"Failed to get trending: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Include the API router
 app.include_router(api)
 
