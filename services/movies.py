@@ -117,35 +117,38 @@ class MovieService:
     def get_popular_movies(self, category: str = 'popular') -> list:
         """Get popular movies/TV shows"""
         try:
-            url = f"https://api.tvmaze.com/shows?page=1"
-            resp = requests.get(url, timeout=10)
-            
-            if resp.status_code != 200:
-                return []
-            
-            shows = resp.json()[:50]
             results = []
-            
-            for show in shows:
-                show_id = show.get('id', 0)
-                runtime = show.get('runtime', 0)
+            # Get multiple pages from TVMaze
+            for page in range(1, 6):
+                url = f"https://api.tvmaze.com/shows?page={page}"
+                resp = requests.get(url, timeout=10)
+                if resp.status_code != 200:
+                    break
+                shows = resp.json()
+                for show in shows:
+                    show_id = show.get('id', 0)
+                    runtime = show.get('runtime', 0)
+                    show_type = show.get('type', '')
+                    
+                    if category == 'movies' and runtime and runtime > 60:
+                        is_movie = True
+                    elif category == 'tv':
+                        is_movie = False
+                    else:
+                        is_movie = runtime and runtime > 60
+                    
+                    if is_movie and show.get('image'):
+                        results.append({
+                            'id': show_id,
+                            'title': show.get('name'),
+                            'year': show.get('premiered', '')[:4] if show.get('premiered') else '',
+                            'image': show.get('image', {}).get('medium') if show.get('image') else '',
+                            'rating': show.get('rating', {}).get('average'),
+                            'type': 'movie'
+                        })
                 
-                if category == 'movies' and runtime and runtime > 60:
-                    is_movie = True
-                elif category == 'tv':
-                    is_movie = False
-                else:
-                    is_movie = runtime and runtime > 60
-                
-                if is_movie:
-                    results.append({
-                        'id': show_id,
-                        'title': show.get('name'),
-                        'year': show.get('premiered', '')[:4] if show.get('premiered') else '',
-                        'image': show.get('image', {}).get('medium') if show.get('image') else '',
-                        'rating': show.get('rating', {}).get('average'),
-                        'type': 'movie'
-                    })
+                if len(results) >= 30:
+                    break
             
             return results[:30]
         except Exception as e:
