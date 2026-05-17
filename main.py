@@ -12,6 +12,7 @@ import httpx
 from services.anilist import AniListService
 from services.provider import provider_service
 from services.movies import movie_service
+from services.hentai import hentai_service
 
 # Configure logging
 logging.basicConfig(
@@ -356,34 +357,61 @@ async def get_trending():
 
 
 # ==================== HENTAI/ADULT ANIME ROUTES ====================
-# Disabled - requires separate adult content service
+
+@api.get("/hentai/providers")
+async def get_hentai_providers():
+    """Get available hentai providers"""
+    from services.hentai import hentai_service
+    providers = hentai_service.get_providers()
+    return {"success": True, "providers": providers}
+
 
 @api.get("/hentai/search")
 async def search_hentai(q: str = Query(..., description="Hentai search query")):
-    """Search for hentai anime - Currently disabled"""
-    return {
-        "success": False,
-        "error": "Hentai service temporarily unavailable",
-        "results": []
-    }
+    """Search for hentai anime"""
+    from services.hentai import hentai_service
+    results = hentai_service.search(q)
+    return {"success": True, "results": results}
 
 
 @api.get("/hentai/{provider}/{anime_id}")
 async def get_hentai_episodes(provider: str, anime_id: str):
-    """Get hentai episodes - Currently disabled"""
+    """Get hentai episodes by provider"""
+    from services.hentai import hentai_service
+    stream = hentai_service.get_stream_url(provider, anime_id)
+    if stream:
+        return {
+            "success": True,
+            "provider": provider,
+            "anime_id": anime_id,
+            "stream_url": stream.get("url"),
+            "referrer": stream.get("referrer")
+        }
     return {
         "success": False,
-        "error": "Hentai service temporarily unavailable",
+        "error": "Provider not found",
         "episodes": []
     }
 
 
 @api.get("/hentai/stream/{provider}/{anime_id}/{episode}")
 async def get_hentai_stream(provider: str, anime_id: str, episode: int = 1):
-    """Get hentai stream URL - Currently disabled"""
+    """Get hentai stream URL"""
+    from services.hentai import hentai_service
+    slug = f"{anime_id}/{episode}"
+    stream = hentai_service.get_stream_url(provider, slug)
+    if stream:
+        return {
+            "success": True,
+            "provider": provider,
+            "anime_id": anime_id,
+            "episode": episode,
+            "stream_url": stream.get("url"),
+            "referrer": stream.get("referrer")
+        }
     return {
         "success": False,
-        "error": "Hentai service temporarily unavailable"
+        "error": "Stream not found"
     }
 
 
