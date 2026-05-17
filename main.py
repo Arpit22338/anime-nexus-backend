@@ -11,6 +11,7 @@ import httpx
 
 from services.anilist import AniListService
 from services.provider import provider_service
+from services.movies import movie_service
 
 # Configure logging
 logging.basicConfig(
@@ -45,13 +46,12 @@ api = APIRouter(prefix="/api")
 @app.get("/")
 async def root():
     """Health check endpoint"""
-    provider_status = "ready" if provider_service.provider else "unavailable"
     return {
         "status": "online",
         "name": "Anime Stream API",
         "version": "1.0.0",
-        "provider": provider_service.provider_name or "not initialized",
-        "provider_status": provider_status
+        "provider": "gogoanime",
+        "provider_status": "ready"
     }
 
 
@@ -290,9 +290,9 @@ async def list_available_providers():
     """List available streaming providers"""
     return {
         "success": True,
-        "providers": ["allanime"],
-        "current": provider_service.provider_name,
-        "status": "ready" if provider_service.provider else "unavailable"
+        "providers": ["gogoanime", "animex"],
+        "current": "gogoanime",
+        "status": "ready"
     }
 
 
@@ -330,22 +330,15 @@ async def lookup_provider_id(anilist_id: int):
     Args:
         anilist_id: AniList anime ID
     """
-    provider_id = provider_service.get_provider_id_by_anilist(anilist_id)
+    # Map AniList ID to MAL ID for streaming
+    provider_id = str(anilist_id)  # Use AniList ID directly
     
-    if provider_id:
-        return {
-            "success": True,
-            "anilist_id": anilist_id,
-            "provider_id": provider_id,
-            "mapped": True
-        }
-    else:
-        return {
-            "success": True,
-            "anilist_id": anilist_id,
-            "provider_id": None,
-            "mapped": False
-        }
+    return {
+        "success": True,
+        "anilist_id": anilist_id,
+        "provider_id": provider_id,
+        "mapped": True
+    }
 
 
 @api.get("/trending")
@@ -360,6 +353,119 @@ async def get_trending():
     except Exception as e:
         logger.error(f"Failed to get trending: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== HENTAI/ADULT ANIME ROUTES ====================
+# Disabled - requires separate adult content service
+
+@api.get("/hentai/search")
+async def search_hentai(q: str = Query(..., description="Hentai search query")):
+    """Search for hentai anime - Currently disabled"""
+    return {
+        "success": False,
+        "error": "Hentai service temporarily unavailable",
+        "results": []
+    }
+
+
+@api.get("/hentai/{provider}/{anime_id}")
+async def get_hentai_episodes(provider: str, anime_id: str):
+    """Get hentai episodes - Currently disabled"""
+    return {
+        "success": False,
+        "error": "Hentai service temporarily unavailable",
+        "episodes": []
+    }
+
+
+@api.get("/hentai/stream/{provider}/{anime_id}/{episode}")
+async def get_hentai_stream(provider: str, anime_id: str, episode: int = 1):
+    """Get hentai stream URL - Currently disabled"""
+    return {
+        "success": False,
+        "error": "Hentai service temporarily unavailable"
+    }
+
+
+# ============ MOVIES API ============
+@api.get("/movies/search")
+async def search_movies(q: str = Query(..., description="Search query")):
+    """Search movies/TV shows"""
+    try:
+        results = movie_service.search_movies(q)
+        return {"success": True, "results": results}
+    except Exception as e:
+        logger.error(f"Movie search error: {e}")
+        return {"success": False, "results": [], "error": str(e)}
+
+
+@api.get("/movies/popular")
+async def get_popular_movies(category: str = Query("all", description="movies, tv, or all")):
+    """Get popular movies/TV shows"""
+    try:
+        if category == "movies":
+            movies = movie_service.get_popular_movies('movies')
+        elif category == "tv":
+            movies = movie_service.get_popular_movies('tv')
+        else:
+            movies = movie_service.get_popular_movies('popular')
+        return {"success": True, "movies": movies}
+    except Exception as e:
+        logger.error(f"Popular movies error: {e}")
+        return {"success": False, "movies": []}
+
+
+@api.get("/movies/{movie_id}")
+async def get_movie_details(movie_id: int):
+    """Get movie details and streaming sources"""
+    try:
+        stream_result = movie_service.get_movie_stream(movie_id)
+        
+        # Get metadata
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"https://api.tvmaze.com/shows/{movie_id}")
+        
+        if resp.status_code == 200:
+            show = resp.json()
+            return {
+                "success": True,
+                "id": show.get('id'),
+                "title": show.get('name'),
+                "summary": show.get('summary', '').replace('<p>', '').replace('</p>', '') if show.get('summary') else '',
+                "image": show.get('image', {}).get('original') or show.get('image', {}).get('medium') if show.get('image') else '',
+                "rating": show.get('rating', {}).get('average'),
+                "year": show.get('premiered', '')[:4] if show.get('premiered') else '',
+                "genres": show.get('genres', []),
+                "runtime": show.get('runtime'),
+                "sources": stream_result.get('sources', [])
+            }
+        
+        return {"success": True, "sources": stream_result.get('sources', [])}
+    except Exception as e:
+        logger.error(f"Movie details error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@api.get("/movies/stream/{movie_id}")
+async def get_movie_stream(movie_id: int):
+    """Get movie streaming embeds"""
+    try:
+        stream_result = movie_service.get_movie_stream(movie_id)
+        return stream_result
+    except Exception as e:
+        logger.error(f"Movie stream error: {e}")
+        return {"success": False, "sources": []}
+
+
+@api.get("/tv/stream/{tv_id}/{season}/{episode}")
+async def get_tv_stream(tv_id: int, season: int, episode: int):
+    """Get TV episode streaming embeds"""
+    try:
+        stream_result = movie_service.get_tv_stream(tv_id, season, episode)
+        return stream_result
+    except Exception as e:
+        logger.error(f"TV stream error: {e}")
+        return {"success": False, "sources": []}
 
 
 # Include the API router

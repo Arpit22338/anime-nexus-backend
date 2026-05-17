@@ -136,3 +136,59 @@ class AniListService:
         """
         title = anime.get("title", {})
         return title.get("romaji") or title.get("english") or title.get("native", "")
+    
+    async def get_trending(self) -> List[Dict]:
+        """Get trending anime from AniList"""
+        graphql_query = """
+        query {
+            Page(page: 1, perPage: 20) {
+                media(type: ANIME, sort: TRENDING_DESC) {
+                    id
+                    idMal
+                    title {
+                        romaji
+                        english
+                    }
+                    episodes
+                    coverImage {
+                        large
+                        extraLarge
+                    }
+                    description
+                    averageScore
+                    format
+                }
+            }
+        }
+        """
+        
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    self.api_url,
+                    json={"query": graphql_query}
+                )
+                
+                if resp.status_code != 200:
+                    return []
+                
+                data = resp.json()
+                media = data.get("data", {}).get("Page", {}).get("media", [])
+                
+                results = []
+                for anime in media:
+                    results.append({
+                        "id": anime.get("id"),
+                        "mal_id": anime.get("idMal"),
+                        "title": anime.get("title", {}).get("romaji") or anime.get("title", {}).get("english", ""),
+                        "episodes": anime.get("episodes"),
+                        "image": anime.get("coverImage", {}).get("large") or anime.get("coverImage", {}).get("extraLarge"),
+                        "score": anime.get("averageScore"),
+                        "format": anime.get("format")
+                    })
+                
+                return results
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Trending error: {e}")
+            return []
