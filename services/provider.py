@@ -86,11 +86,17 @@ class GogoAnimeProvider:
         })
     
     def get_stream_url(self, anime_id: str, episode: int) -> Optional[Dict]:
+        embed_url = f"https://vidnest.fun/anime/{anime_id}/{episode}/sub"
         return {
-            'url': f"{self.BASE_URL}/watch/{anime_id}/ep/{episode}",
-            'referrer': self.BASE_URL,
-            'resolution': 720,
-            'source': 'gogoanime'
+            'url': embed_url,
+            'referrer': 'https://vidnest.fun',
+            'resolution': 1080,
+            'source': 'vidnest',
+            'embed_providers': [
+                {'name': 'VidNest', 'url': f"https://vidnest.fun/anime/{anime_id}/{episode}/sub"},
+                {'name': 'SpenEmbed', 'url': f"https://spencerdevs.xyz/anime/{anime_id}/{episode}"},
+                {'name': 'DropFile', 'url': f"https://dropfile.cc/player/tv/anilist-{anime_id}/1/{episode}"},
+            ]
         }
 
 
