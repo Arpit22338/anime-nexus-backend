@@ -56,6 +56,27 @@ async def root():
     }
 
 
+@api.post("/anilist")
+async def proxy_anilist(request: dict):
+    """Proxy AniList GraphQL to avoid CORS"""
+    try:
+        query = request.get('query', '')
+        variables = request.get('variables', {})
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://graphql.anilist.co",
+                json={"query": query, "variables": variables}
+            )
+        
+        if resp.status_code == 200:
+            return resp.json()
+        return {"errors": [{"message": "AniList API error"}]}
+    except Exception as e:
+        logger.error(f"Anilist proxy error: {e}")
+        return {"errors": [{"message": str(e)}]}
+
+
 @api.get("/search")
 async def search_anime(
     q: str = Query(..., description="Anime name to search"),
